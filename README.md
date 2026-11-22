@@ -35,7 +35,7 @@ These are captures of the real application renderer using an isolated demonstrat
 - English, Türkçe, Svenska and Español. System language by default, English fallback; app and keyboard language can be selected independently.
 - Plex sign-in using QR/link code. The existing account is retained across updates.
 
-This is a **first preview release**, not complete parity with every Plex client. See [validation and limitations](docs/VALIDATION.md). Account/server features depend on Plex permissions and capabilities. Heavy 4K sources may require a faster server or an optimized version; this device does not gain 4K/HDR hardware support through transcoding.
+This is a **first release**, not complete parity with every Plex client. See [validation and limitations](docs/VALIDATION.md). Account/server features depend on Plex permissions and capabilities. Heavy 4K sources may require a faster server or an optimized version; this device does not gain 4K/HDR hardware support through transcoding.
 
 ## Install a release
 
