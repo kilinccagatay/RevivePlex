@@ -166,8 +166,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif self.path.split("?", 1)[0] == "/library/metadata/101":
             body = (b'<MediaContainer><Photo title="Landscape" type="photo" ratingKey="101" '
                     b'thumb="/library/metadata/101/thumb/1"/></MediaContainer>')
+        elif self.path.split("?", 1)[0] == "/library/metadata/60":
+            body = b'<MediaContainer><Directory type="show" title="Fixture Series" ratingKey="60"><Role id="123" tag="An Actor" role="A role"/></Directory></MediaContainer>'
+        elif self.path.split("?", 1)[0] == "/library/metadata/64":
+            body = b'<MediaContainer><Video type="episode" ratingKey="64" grandparentRatingKey="60"/></MediaContainer>'
+        elif self.path.split("?", 1)[0] == "/library/metadata/65":
+            body = b'<MediaContainer><Directory type="season" ratingKey="65"/></MediaContainer>'
+        elif self.path.split("?", 1)[0] == "/library/metadata/66":
+            body = b'<MediaContainer><Video type="episode" ratingKey="66" grandparentRatingKey="60"><Role id="124" tag="Guest Actor" role="Guest"/></Video></MediaContainer>'
         elif self.path.split("?", 1)[0] == "/library/metadata/61":
-            body = b'<MediaContainer><Directory type="season" title="Season 1" parentTitle="Fixture Series" ratingKey="61" summary="Season summary"/></MediaContainer>'
+            body = b'<MediaContainer><Directory type="season" title="Season 1" parentTitle="Fixture Series" ratingKey="61" parentRatingKey="60" summary="Season summary"/></MediaContainer>'
         elif self.path.split("?", 1)[0] == "/library/metadata/61/children":
             body = (b'<MediaContainer><Video type="episode" title="Pilot" grandparentTitle="Fixture Series" ratingKey="62" parentIndex="1" index="1" viewCount="1"/>'
                     b'<Video type="episode" title="Second" grandparentTitle="Fixture Series" ratingKey="63" parentIndex="1" index="2" viewOffset="42000" duration="1200000"/></MediaContainer>')

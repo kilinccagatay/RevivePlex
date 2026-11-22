@@ -373,6 +373,18 @@ int main(int argc, char **argv)
                 [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
             verify(verified, "Photo/cast timed out");
         }
+        for (NSString *key in @[@"61", @"64", @"65", @"66"]) {
+            __block BOOL finished = NO;
+            loadRows(@{@"kind":@"cast", @"path":[@"/library/metadata/" stringByAppendingString:key], @"title":@"Cast"}, ^(NSArray *rows) {
+                if ([key isEqual:@"65"]) verify(rows[0][@"panel"] != nil, "Missing cast should show an empty-state panel");
+                else verify([rows[0][@"title"] isEqual:[key isEqual:@"66"] ? @"Guest Actor" : @"An Actor"], "Cast fallback lost show cast or replaced episode guest cast");
+                finished = YES;
+            });
+            NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+            while (!finished && [deadline timeIntervalSinceNow] > 0)
+                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+            verify(finished, "Cast fallback timed out");
+        }
         __block BOOL watchlistVerified = NO;
         loadRows(@{@"kind":@"watchlist", @"path":@"", @"title":@"Watchlist"}, ^(NSArray *rows) {
             verify(rows.count == 1 && [rows[0][@"catalogCaption"] isEqual:@"2024"], "Cloud Watchlist metadata lost");

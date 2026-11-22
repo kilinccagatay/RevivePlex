@@ -1349,6 +1349,8 @@ static void runScreenProbes(id home, id stack, id routes, unsigned long index)
             revivePlexCaptureScreenForProbe(screen, @"RevivePlex.description-first.png");
             sendProbeEvent(stack, 4);
         }
+        unsigned long scrollSteps = SEND(unsigned long)(valueForKey(route, @"scrollSteps"), SELECTOR("unsignedIntegerValue"));
+        for (unsigned long step = 0; step < scrollSteps && step < 50; step++) sendProbeEvent(stack, 4);
         revivePlexCaptureScreenForProbe(screen, filename);
         syslog(LOG_NOTICE, "RevivePlex: additional screen probe %lu loaded=%d", index,
             !valueForKey(liveRow(screen, 0), @"shelfLoading"));

@@ -156,6 +156,33 @@ static CGRect visualFrame(CGFloat height, CGFloat x, CGFloat y, CGFloat width, C
     return CGRectMake(x, height - y - itemHeight, width, itemHeight);
 }
 
+// BackRow uses bottom-origin coordinates. Keep this decoration outside the
+// focusable cards and within the existing right gutter; never resize artwork.
+static void showScrollIndicator(UIView *view, NSUInteger page, NSUInteger pageCount,
+                                CGFloat top, CGFloat bottom)
+{
+    [[view viewWithTag:9401] removeFromSuperview];
+    if (pageCount < 2) return;
+    CGFloat width = view.bounds.size.width, height = view.bounds.size.height;
+    CGFloat thickness = MAX(4, height * 0.006);
+    CGFloat trackHeight = bottom - top;
+    CGFloat thumbHeight = MAX(height * 0.035, trackHeight / pageCount);
+    CGFloat travel = trackHeight - thumbHeight;
+    CGFloat offset = travel * MIN(page, pageCount - 1) / (pageCount - 1);
+    UIView *track = [[UIView alloc] initWithFrame:visualFrame(height,
+        width * 0.958, top, thickness, trackHeight)];
+    track.tag = 9401;
+    track.userInteractionEnabled = NO;
+    track.backgroundColor = [UIColor colorWithWhite:0.32 alpha:1];
+    track.layer.cornerRadius = thickness / 2;
+    UIView *thumb = [[UIView alloc] initWithFrame:visualFrame(trackHeight, 0, offset, thickness, thumbHeight)];
+    thumb.userInteractionEnabled = NO;
+    thumb.backgroundColor = [UIColor colorWithRed:1 green:0.73 blue:0.24 alpha:1];
+    thumb.layer.cornerRadius = thickness / 2;
+    [track addSubview:thumb];
+    [view addSubview:track];
+}
+
 static UIImageView *renderedText(CGRect frame, NSString *text, CGFloat size, BOOL bold, NSInteger centered, UIColor *color, BOOL wrap)
 {
     UIImageView *view = [[UIImageView alloc] initWithFrame:frame];
@@ -493,6 +520,7 @@ static void drawDescriptionPage(RevivePlexShelf *shelf)
     UIImageView *body = renderedText(visualFrame(height, margin, height * 0.24, width - margin * 2, height * 0.65),
         shelf.textPages[shelf.textPage], height * 0.029, NO, NO, nil, YES);
     body.tag = 930; [shelf.view addSubview:body];
+    showScrollIndicator(shelf.view, shelf.textPage, shelf.textPages.count, height * 0.24, height * 0.89);
     if (shelf.textPages.count > 1) {
         UIImageView *footer = renderedLabel(visualFrame(height, margin, height * 0.93, width - margin * 2, height * 0.04),
             [NSString stringWithFormat:@"↑ ↓    %ld / %lu", (long)shelf.textPage + 1, (unsigned long)shelf.textPages.count], height * 0.023, NO, YES, nil);
@@ -622,6 +650,7 @@ static void populatePanel(RevivePlexShelf *shelf, NSArray *rows, NSString *title
             rows[0][@"title"], height * 0.031, NO, NO, muted, YES)];
     }
     NSUInteger pageCount = detailActions ? (actionIndex + 15) / 16 : (filterGrid ? (compactPair ? (summaryPair ? (actionIndex + 7) / 8 : (actionIndex + 11) / 12) : (actionIndex + 27) / 28) : (actionGrid ? (actionIndex + 5) / 6 : (actionIndex + 3) / 4));
+    showScrollIndicator(shelf.view, shelf.page, pageCount, height * (detailActions ? 0.565 : filterGrid ? 0.25 : 0.34), height * 0.90);
     if (pageCount > 1) [shelf.view addSubview:renderedLabel(visualFrame(height, width * 0.82, height * 0.92, width * 0.12, height * 0.04),
         [NSString stringWithFormat:@"%ld / %lu", (long)shelf.page + 1, (unsigned long)pageCount], height * 0.024, NO, YES, muted)];
 }
@@ -831,6 +860,14 @@ signed char revivePlexShowShelf(id menu, id data, long selection, id title)
                     if (task) [shelf.tasks addObject:task];
                 }
             }
+        }
+        if (!panel) {
+            NSUInteger excluded = searchText ? keyCount : toolbarCount;
+            NSUInteger count = rows.count - MIN(rows.count, excluded);
+            NSUInteger capacity = searchText ? columns * 2 : pageSize;
+            NSUInteger pages = (NSUInteger)ceilf((float)count / (float)capacity);
+            CGFloat top = height * (searchText ? 0.34 : hero ? (toolbarCount ? 0.49 : 0.44) : toolbarCount ? 0.24 : 0.18);
+            showScrollIndicator(shelf.view, page, pages, top, height * (hero ? 0.82 : 0.94));
         }
         [host addSubview:shelf.view];
         objc_setAssociatedObject(menu, &shelfKey, shelf, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -1139,6 +1176,9 @@ signed char revivePlexShowHomeRails(id menu, id data, long selection)
             [home.view addSubview:card];
             [home.cards addObject:card];
         }
+        NSUInteger lastMediaRail = 0;
+        for (NSDictionary *entry in rows) lastMediaRail = MAX(lastMediaRail, [entry[@"homeRail"] unsignedIntegerValue]);
+        showScrollIndicator(home.view, page, (lastMediaRail + 1) / 2, height * 0.176, height * 0.91);
         [host addSubview:home.view];
         objc_setAssociatedObject(menu, &homeRailsKey, home, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         syslog(LOG_NOTICE, "RevivePlex: home artwork rails visible");

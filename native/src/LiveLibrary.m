@@ -861,6 +861,22 @@ static void queueWindow(PlexClient *client, NSString *queueID, NSString *center,
     }];
 }
 
+static NSArray *castRows(NSDictionary *item)
+{
+    NSMutableArray *cast = [NSMutableArray array];
+    for (NSDictionary *person in item[@"Role"]) {
+        NSString *name = person[@"tag"];
+        if (!name.length) continue;
+        NSMutableDictionary *card = [@{@"title":name, @"shelf":@YES, @"mediaType":@"person",
+            @"catalogCaption":person[@"role"] ?: @""} mutableCopy];
+        NSString *personID = numberKey(person[@"id"]);
+        if (personID) card[@"route"] = route(name, @"media", [NSString stringWithFormat:@"/library/people/%@/media", personID]);
+        if ([person[@"thumb"] hasPrefix:@"/library/"] || [person[@"thumb"] hasPrefix:@"https://metadata-static.plex.tv/"]) card[@"artwork"] = person[@"thumb"];
+        [cast addObject:card];
+    }
+    return cast.count ? cast : panelRows(@[row(RPText(@"İçerik bulunamadı"), nil)], nil);
+}
+
 void revivePlexLoadRows(id selectedRoute, void (^completion)(id))
 {
 #ifdef REVIVEPLEX_DEMO_SCREENSHOTS
@@ -1412,6 +1428,26 @@ void revivePlexLoadRows(id selectedRoute, void (^completion)(id))
     NSDictionary *parameters = selectedRoute[@"parameters"];
     for (NSString *key in @[@"sort", @"genre", @"year", @"unwatched", @"actor"])
         if (![kind isEqual:@"filterValues"] && [parameters[key] isKindOfClass:[NSString class]]) [query addObject:[NSURLQueryItem queryItemWithName:key value:parameters[key]]];
+    if ([kind isEqual:@"cast"]) {
+        [client fetchPath:path query:nil completion:^(NSDictionary *metadata, NSError *error) {
+            NSDictionary *item = [metadata[@"items"] firstObject];
+            NSString *parent = [item[@"type"] isEqual:@"season"] ? numberKey(item[@"parentRatingKey"]) :
+                [item[@"type"] isEqual:@"episode"] ? numberKey(item[@"grandparentRatingKey"]) : nil;
+            // Seasons commonly omit Role entirely; use their show's cast. Episode
+            // guest cast remains authoritative when supplied by the server.
+            if (!error && ![item[@"Role"] count] && parent && ![parent isEqual:[path lastPathComponent]]) {
+                [client fetchPath:[@"/library/metadata/" stringByAppendingString:parent] query:nil
+                    completion:^(NSDictionary *show, NSError *showError) {
+                    NSArray *rows = showError ? panelRows(@[row(RPText(@"Bağlantı kurulamadı"), nil)], nil) : castRows([show[@"items"] firstObject]);
+                    dispatch_async(dispatch_get_main_queue(), ^{ completion(rows); });
+                }];
+            } else {
+                NSArray *rows = error ? panelRows(@[row(RPText(@"Bağlantı kurulamadı"), nil)], nil) : castRows(item);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(rows); });
+            }
+        }];
+        return;
+    }
     if ([kind isEqual:@"series"]) {
         [client fetchPath:path query:nil completion:^(NSDictionary *metadata, NSError *metadataError) {
             if (metadataError) {
@@ -1598,19 +1634,7 @@ void revivePlexLoadRows(id selectedRoute, void (^completion)(id))
         } else if ([kind isEqual:@"description"]) {
             NSDictionary *item = [result[@"items"] firstObject];
             rows = panelRows(@[row(item[@"title"] ?: @"", nil)], @{@"longText":item[@"summary"] ?: @"", @"title":item[@"title"] ?: @""});
-        } else if ([kind isEqual:@"cast"]) {
-            NSMutableArray *cast = [NSMutableArray array];
-            for (NSDictionary *person in [result[@"items"] firstObject][@"Role"]) {
-                NSString *name = person[@"tag"];
-                if (!name.length) continue;
-                NSMutableDictionary *card = [@{@"title":name, @"shelf":@YES, @"mediaType":@"person",
-                    @"catalogCaption":person[@"role"] ?: @""} mutableCopy];
-                NSString *personID = numberKey(person[@"id"]);
-                if (personID) card[@"route"] = route(name, @"media", [NSString stringWithFormat:@"/library/people/%@/media", personID]);
-                if ([person[@"thumb"] hasPrefix:@"/library/"] || [person[@"thumb"] hasPrefix:@"https://metadata-static.plex.tv/"]) card[@"artwork"] = person[@"thumb"];
-                [cast addObject:card];
-            }
-            rows = cast.count ? cast : panelRows(@[row(RPText(@"İçerik bulunamadı"), nil)], nil);
+
         } else if ([kind isEqual:@"detail"]) {
             rows = detailRows([result[@"items"] firstObject], result[@"parts"]);
             if (selectedRoute[@"playlistID"]) {

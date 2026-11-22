@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Show a persistent right-hand scroll indicator when content spans multiple screens, including seasons, libraries, cast, search results, settings and home rails.
+- Keep card sizes and remote focus behavior unchanged; hide the indicator when all content fits.
+- Fall back to the show cast when season or episode metadata has no cast, while preserving episode-specific cast when present.
+
 ## 0.1.1
 
 - Resume playback when leaving playback options with Menu/Back, retaining position, selected version and queue.

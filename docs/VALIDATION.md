@@ -96,3 +96,18 @@ native playback-options entry point, sent Menu/Back, and verified return to the
 native player at the saved position with playback running. This checks controller
 flow and timeline position; it does not establish new physical lip-sync measurements.
 The existing precise seek and server audio settings remain in use.
+
+
+## 0.1.2 scrolling and cast regression checks
+
+- ARMv7 release build, code signature and bundle plist checks passed.
+- Host fixture suite passed, including new season-to-show and episode-to-show
+  cast fallback cases, preserving episode-specific cast and a missing-parent
+  empty state. All committed fixtures use synthetic names.
+- The scroll indicator is decorative and does not add a focus target or change
+  card geometry. It is hidden for a single screen and tracks page position
+  for overflowing shelves, search results, panels, long descriptions and home rails.
+- Installed the release binary on the target Apple TV and verified the transfer
+  checksum. Device captures confirmed the indicator at the first, middle and last
+  season page, and populated cast cards after the parent-show fallback.
+  Private device captures remain outside the repository and release archive.

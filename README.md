@@ -45,8 +45,8 @@ This is a **first release**, not complete parity with every Plex client. See [va
 
 ```sh
 shasum -a 256 -c SHA256SUMS
-unzip RevivePlex-0.1.1.zip
-cd RevivePlex-0.1.1
+unzip RevivePlex-0.1.2.zip
+cd RevivePlex-0.1.2
 python3 tools/install.py root@APPLE_TV_IP --legacy-ssh --check
 python3 tools/install.py root@APPLE_TV_IP --legacy-ssh --bundle RevivePlex.frappliance
 ```
