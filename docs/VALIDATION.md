@@ -3,6 +3,12 @@
 Test target: AppleTV3,2 / A1469, firmware build 12H1006. This is an initial
 preview release, not a claim of complete Plex feature parity.
 
+## Reopened blocker
+
+Audio/video desynchronization was reported again after the initial checks, including
+playback from the beginning. Earlier successful samples do not establish a fix.
+Public-release readiness is blocked pending diagnosis and repeatable validation.
+
 ## Passed
 
 - ARMv7 build, ad-hoc signature verification and plist validation.
