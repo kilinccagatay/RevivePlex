@@ -44,6 +44,7 @@ stub ImageIO /System/Library/Frameworks/ImageIO.framework/ImageIO \
 
 demo_flags=()
 if [[ ${REVIVEPLEX_DEMO_SCREENSHOTS:-0} == 1 ]]; then demo_flags=(-DREVIVEPLEX_DEMO_SCREENSHOTS); fi
+if [[ ${REVIVEPLEX_SYNC_DIAGNOSTIC:-0} == 1 ]]; then demo_flags+=(-DREVIVEPLEX_SYNC_DIAGNOSTIC); fi
 sdk=$(xcrun --sdk iphoneos --show-sdk-path)
 for source in Localization PlexClient LiveLibrary Playback RangeStream DirectPlay Artwork PlexLink; do
     xcrun --sdk iphoneos clang -target armv7-apple-ios8.0 -isysroot "$sdk" -marm \

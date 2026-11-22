@@ -2025,6 +2025,18 @@ static void beginMediaTranscode(id path, id session, BOOL audioProbe, id request
 
 void revivePlexBeginPlaybackRoute(id selectedRoute, id session, void (^completion)(id))
 {
+#ifdef REVIVEPLEX_SYNC_DIAGNOSTIC
+    // Local, explicitly requested control sample. Never part of a release build.
+    if ([selectedRoute[@"diagnostic"] boolValue] && [selectedRoute[@"syncControl"] boolValue]) {
+        NSString *file = @"/var/mobile/Library/Caches/RevivePlex.sync-control.mp4";
+        if (![[NSFileManager defaultManager] fileExistsAtPath:file]) { completion(nil); return; }
+        if (!playbackMetadata) playbackMetadata = [NSMutableDictionary dictionary];
+        playbackMetadata[session] = [@{@"type":@"movie", @"title":@"Local synchronization control",
+            @"diagnostic":@YES, @"localSyncControl":@YES} mutableCopy];
+        dispatch_async(dispatch_get_main_queue(), ^{ completion([NSURL fileURLWithPath:file]); });
+        return;
+    }
+#endif
     if ([selectedRoute[@"diagnostic"] boolValue] || [selectedRoute[@"markerProbe"] boolValue]) {
         NSMutableDictionary *clean = [selectedRoute mutableCopy]; [clean removeObjectForKey:@"diagnostic"]; [clean removeObjectForKey:@"markerProbe"];
         revivePlexBeginPlaybackRoute(clean, session, ^(id url) {
@@ -2262,11 +2274,13 @@ void revivePlexBeginAudioProbe(id path, id session, void (^completion)(id))
 void revivePlexEndTranscode(id session)
 {
     if (!session) return;
+    BOOL localControl = [playbackMetadata[session][@"localSyncControl"] boolValue];
     BOOL audio = [playbackMetadata[session][@"type"] isEqual:@"track"];
     [playbackQueues removeObjectForKey:session];
     [playbackPaths removeObjectForKey:session];
     [playbackMarkers removeObjectForKey:session];
     [playbackMetadata removeObjectForKey:session];
+    if (localControl) return;
     [transcodeClient() fetchDataForPath:audio ? @"/audio/:/transcode/universal/stop" : @"/video/:/transcode/universal/stop"
         query:@[[NSURLQueryItem queryItemWithName:@"session" value:session]]
         completion:^(NSData *data, NSError *error) { (void)data; (void)error; }];

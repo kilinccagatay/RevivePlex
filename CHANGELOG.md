@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0
+
+- Fix rapid-seek crashes by keeping decorative overlays outside BackRow control traversal.
+- Serialize precise 10-second seeks and coalesce rapid taps.
+- Keep native play/pause state consistent after seeking.
+- Include the device-tested player binary; preserve existing audio and quality preferences.
+
+
 ## 0.1.0-preview.1
 
 Initial private preview: native Apple TV 3 Plex browsing and playback, four

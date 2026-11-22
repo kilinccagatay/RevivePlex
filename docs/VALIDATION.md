@@ -1,13 +1,14 @@
-# 0.1.0-preview.1 validation
+# 0.1.0 validation
 
-Test target: AppleTV3,2 / A1469, firmware build 12H1006. This is an initial
-preview release, not a claim of complete Plex feature parity.
+Test target: AppleTV3,2 / A1469, firmware build 12H1006. This is the initial
+release, not a claim of complete Plex feature parity.
 
-## Reopened blocker
+## Synchronization validation scope
 
 Audio/video desynchronization was reported again after the initial checks, including
 playback from the beginning. Earlier successful samples do not establish a fix.
-Public-release readiness is blocked pending diagnosis and repeatable validation.
+The revised seek path below passed targeted device checks and owner observation.
+Broader source and output testing is still needed; universal synchronization is not claimed.
 
 ## Passed
 
@@ -52,16 +53,16 @@ check, bundle upload, binary SHA256 readback, existing-bundle backup, install an
 interface restart passed. The Plex session remained valid. The clean exported
 source tree also passed its own host tests and ARMv7 build.
 
-## Rapid seeking crash fix (source after preview.1)
+## Rapid seeking crash fix
 
 A device crash during rapid seeking was traced to `-[UIView active]`: BackRow
 traversed a UIView-backed decorative overlay as a native control. Player hints
 now render to images on delegate-free CALayers. A 48-press alternating seek
 burst passed on the physical device without restarting the player process.
 The ARMv7 build and host fixture suite passed. Audio/transcode settings were
-not changed. The preview.1 download predates this fix.
+not changed. The v0.1.0 package includes this fix.
 
-## Post-seek synchronization candidate
+## Post-seek synchronization fix
 
 The owner reproduced lip-sync loss after seeking with the old native trick-play
 path. Directional taps now accumulate in 10-second increments and debounce for
@@ -69,11 +70,11 @@ path. Directional taps now accumulate in 10-second increments and debounce for
 update its pending target. BackRow's playing/paused state is updated together
 with its AVPlayer, so the next Select toggle remains consistent.
 
-The owner confirmed lip sync in one tested series with this candidate. Two on-device
+The owner confirmed lip sync in one tested series with this revision. Two on-device
 samples exercise forward/backward seeks and pause/resume. Target/time and
 player-state logs are technical checks, not measurements of physical HDMI
 audio/video alignment. Broader source/output validation remains open, and
-the preview.1 downloadable binary does not include this candidate.
+the v0.1.0 downloadable binary includes this revision.
 
 Both sample runs completed: four queued seeks reached their requested targets
 within 1 ms in the completion logs, and subsequent timeline checks returned
