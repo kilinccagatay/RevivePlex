@@ -47,8 +47,8 @@ You can check the installed version and build under **Settings → About**.
 
 ```sh
 shasum -a 256 -c SHA256SUMS
-unzip RevivePlex-0.1.3.zip
-cd RevivePlex-0.1.3
+unzip RevivePlex-0.1.4.zip
+cd RevivePlex-0.1.4
 python3 tools/install.py root@APPLE_TV_IP --legacy-ssh --check
 python3 tools/install.py root@APPLE_TV_IP --legacy-ssh --bundle RevivePlex.frappliance
 ```

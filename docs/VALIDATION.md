@@ -145,3 +145,30 @@ The page is local and does not request Plex server data.
 
 The final About page was visually checked on Apple TV in all four languages;
 version 0.1.3 and build 6 were displayed without clipping.
+
+## 0.1.4 media pipeline preparation
+
+A later report of desynchronization after reopening the application showed that
+0.1.3's earlier observations were not sufficient to establish a lasting fix.
+The host preference domain (`com.apple.lowtide`) retained quality, language and
+skip preferences across process restart; no preference reset was reproduced.
+
+The new candidate calls AVPlayer preroll after a completed seek before restoring
+playback intent. It avoids an extra native pause and defers the BackRow state
+restoration by 100 ms, retaining the seek identity/revision so newer input wins.
+The 100 ms interval is state-transition settling time, not an audio offset.
+
+- ARMv7 build, signing and host fixture suite passed.
+- The clean release executable is byte-for-byte identical to the device-tested
+  executable; only the bundle version/build metadata changes for the release.
+- Resumed and fresh playback each passed forward/backward bursts and pause/resume
+  checks, repeated after an AppleTV process restart. The owner confirmed lip
+  sync for resumed and fresh playback, both seek directions and pause/resume
+  before and after that restart.
+- `check_seek_log.py /path/to/private-device.log --require-preroll` additionally
+  checks that every tested seek has a successful pipeline preparation completion.
+
+These checks concern the tested source and HDMI setup. Timeline logs do not
+measure physical A/V alignment and no universal synchronization guarantee is made.
+
+Reference: [Apple AVPlayer preroll](https://developer.apple.com/documentation/avfoundation/avplayer/preroll(atrate:completionhandler:)?language=objc).

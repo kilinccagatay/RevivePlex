@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4
+
+- Prepare the AVPlayer media pipelines after successful seeks before resuming playback.
+- Restore native play/pause intent after the pending pause transition, preserving newer remote input.
+- Extend the private device-log checker to verify pipeline preparation as well as seek and transport state.
+
 ## 0.1.3
 
 - Add Settings > About with installed version/build, platform, license and project/support address in all four interface languages.

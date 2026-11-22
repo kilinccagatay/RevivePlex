@@ -47,6 +47,7 @@ static char systemSeekKey, systemOptionsPendingKey;
 @property(nonatomic) NSUInteger revision;
 @property(nonatomic) NSUInteger interruptions;
 @property(nonatomic) BOOL showsFeedback;
+@property(nonatomic) BOOL priming;
 @end
 @implementation RevivePlexSeekState
 @end
@@ -68,6 +69,32 @@ static void setSystemPlaybackRunning(id player, BOOL running)
         ((BOOL (*)(id, SEL, int, NSError **))objc_msgSend)(player, state, running ? 3 : 1, &error)) return;
     AVPlayer *native = underlyingSystemPlayer(player);
     if (running) [native play]; else [native pause];
+}
+
+static void finishQueuedSeek(id controller, RevivePlexSeekState *state);
+
+static void completePreparedSeek(id controller, id player, AVPlayer *native,
+                                 RevivePlexSeekState *state, double requested, BOOL prepared)
+{
+    if (!controller || objc_getAssociatedObject(controller, &systemSeekKey) != state ||
+        !objc_getAssociatedObject(controller, &systemSessionKey)) return;
+    state.inFlight = NO; state.priming = NO;
+    if (fabs(state.target - requested) > 0.001 || (!prepared && state.interruptions++ < 2)) {
+        finishQueuedSeek(controller, state); return;
+    }
+    double actual = CMTimeGetSeconds(native.currentTime);
+    syslog(LOG_NOTICE, "RevivePlex: prepared seek requested=%.3f actual=%.3f prepared=%d resume=%d", requested, actual, prepared, state.wantsPlayback);
+    if (state.showsFeedback) revivePlexShowSeekFeedback(controller, actual - state.origin, actual, CMTimeGetSeconds(native.currentItem.duration));
+    // Let the native pause notification finish before restoring BackRow state.
+    NSUInteger revision = state.revision;
+    __weak id weakController = controller;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * (int64_t)NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        id active = weakController;
+        if (!active || !objc_getAssociatedObject(active, &systemSessionKey) ||
+            objc_getAssociatedObject(active, &systemSeekKey) != state || state.revision != revision) return;
+        objc_setAssociatedObject(active, &systemSeekKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        setSystemPlaybackRunning(player, state.wantsPlayback);
+    });
 }
 
 static void finishQueuedSeek(id controller, RevivePlexSeekState *state)
@@ -98,12 +125,18 @@ static void finishQueuedSeek(id controller, RevivePlexSeekState *state)
                 // Retry within the same queue instead of losing the playback intent.
                 finishQueuedSeek(active, state); return;
             }
-            objc_setAssociatedObject(active, &systemSeekKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             double actual = CMTimeGetSeconds(native.currentTime);
             syslog(LOG_NOTICE, "RevivePlex: queued precise seek requested=%.3f actual=%.3f completed=%d resume=%d", requested, actual, finished, state.wantsPlayback);
-            if (finished && state.showsFeedback)
-                revivePlexShowSeekFeedback(active, actual - state.origin, actual, CMTimeGetSeconds(native.currentItem.duration));
-            setSystemPlaybackRunning(player, state.wantsPlayback);
+            if (finished && state.wantsPlayback && native.status == AVPlayerStatusReadyToPlay) {
+                // Seek completion selects the time; preroll prepares both media
+                // pipelines at that time before the clock is allowed to advance.
+                state.inFlight = YES; state.priming = YES;
+                [native prerollAtRate:1 completionHandler:^(BOOL prepared) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        completePreparedSeek(weakController, player, native, state, requested, prepared);
+                    });
+                }];
+            } else completePreparedSeek(active, player, native, state, requested, finished);
         });
     }];
 }
@@ -123,6 +156,7 @@ static void queueSystemPosition(id controller, double value, BOOL relative, BOOL
         setSystemPlaybackRunning(player, NO);
     }
     state.target = MAX(0, MIN(MAX(0, duration - 0.05), relative ? state.target + value : value));
+    if (state.priming) [native cancelPendingPrerolls];
     state.showsFeedback = feedback;
     state.interruptions = 0;
     NSUInteger revision = ++state.revision;
