@@ -1079,6 +1079,61 @@ static long probeSelection(id menu)
     return SEND(long)(SEND(id)(menu, SELECTOR("list")), SELECTOR("selection"));
 }
 
+static void runScreenProbes(id home, id stack, id routes, unsigned long index);
+
+static void runSyncSeekProbe(id home, id stack, id routes, unsigned long index, unsigned int attempts)
+{
+    if (!attempts) { stage("sync seek probe readiness timed out"); return; }
+    id current = SEND(id)(stack, SELECTOR("peekController"));
+    if (current == home) return;
+    id route = SEND(id, unsigned long)(routes, SELECTOR("objectAtIndex:"), index);
+    int ready = 0;
+    if (SEND(signed char, Class)(current, SELECTOR("isKindOfClass:"), objc_getClass("RevivePlexSystemPlayerController"))) {
+        id player = SEND(id)(current, SELECTOR("player"));
+        double requested = SEND(double)(valueForKey(route, @"resume"), SELECTOR("doubleValue"));
+        ready = SEND(double)(player, SELECTOR("rate")) == 1 && SEND(double)(player, SELECTOR("elapsedTime")) > requested + 0.2;
+    }
+    if (!ready) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500 * (int64_t)NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+            runSyncSeekProbe(home, stack, routes, index, attempts - 1);
+        }); return;
+    }
+    syslog(LOG_NOTICE, "RevivePlex: sync seek probe ready sample=%lu", index);
+        // Exercise the real remote path, then leave time for playback to settle.
+        for (int step = 0; step < 12; step++) {
+            int action = step < 8 ? 7 : 6;
+            int milliseconds = step < 8 ? 15000 + step * 300 : 45000 + (step - 8) * 300;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, milliseconds * (int64_t)NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+                id current = SEND(id)(stack, SELECTOR("peekController"));
+                if (SEND(signed char, Class)(current, SELECTOR("isKindOfClass:"), objc_getClass("RevivePlexSystemPlayerController"))) sendProbeEvent(stack, action);
+            });
+        }
+        const int checkpoints[] = {22, 30, 52, 60, 70, 73, 85, 100};
+        for (unsigned int check = 0; check < sizeof(checkpoints) / sizeof(checkpoints[0]); check++) {
+            int second = checkpoints[check];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, second * (int64_t)NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                id current = SEND(id)(stack, SELECTOR("peekController"));
+                if (!SEND(signed char, Class)(current, SELECTOR("isKindOfClass:"), objc_getClass("RevivePlexSystemPlayerController"))) return;
+                id player = SEND(id)(current, SELECTOR("player"));
+                double rate = SEND(double)(player, SELECTOR("rate"));
+                syslog(LOG_NOTICE, "RevivePlex: sync seek checkpoint=%d sample=%lu position=%.3f rate=%.2f", second, index,
+                    SEND(double)(player, SELECTOR("elapsedTime")), rate);
+                if (second == 73 && rate != 1) sendProbeEvent(stack, 5);
+                if (second == 70 && rate == 1) sendProbeEvent(stack, 5);
+            });
+        }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 110 * (int64_t)NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        id active = SEND(id)(stack, SELECTOR("peekController"));
+        if (SEND(signed char, Class)(active, SELECTOR("isKindOfClass:"), objc_getClass("RevivePlexSystemPlayerController"))) {
+            id player = SEND(id)(active, SELECTOR("player"));
+            syslog(LOG_NOTICE, "RevivePlex: sync seek probe finished sample=%lu position=%.3f rate=%.2f", index,
+                SEND(double)(player, SELECTOR("elapsedTime")), SEND(double)(player, SELECTOR("rate")));
+            sendProbeEvent(stack, 1);
+        }
+        runScreenProbes(home, stack, routes, index + 1);
+    });
+}
+
 static void runScreenProbes(id home, id stack, id routes, unsigned long index)
 {
     revivePlexSetDiagnosticLanguage(0);
@@ -1144,6 +1199,9 @@ static void runScreenProbes(id home, id stack, id routes, unsigned long index)
         }); return;
     }
     int formatProbe = SEND(signed char)(valueForKey(route, @"formatProbe"), SELECTOR("boolValue"));
+    if (SEND(signed char)(valueForKey(route, @"syncSeekProbe"), SELECTOR("boolValue"))) {
+        runSyncSeekProbe(home, stack, routes, index, 180); return;
+    }
     if (SEND(signed char)(valueForKey(route, @"seekBurstProbe"), SELECTOR("boolValue"))) {
         for (int step = 0; step < 48; step++) {
             int action = (step / 8) % 2 ? 6 : 7;

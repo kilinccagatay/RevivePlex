@@ -74,7 +74,7 @@ Scan the QR code or visit the displayed Plex link and enter the activation code.
 
 | Control | Action |
 | --- | --- |
-| Direction buttons | Move focus; native playback seeking when watching |
+| Direction buttons | Move focus; left/right skip 10 seconds during playback (rapid taps combine into one target) |
 | Select | Open an item; native playback control when watching |
 | Hold Select | Open playback options; the on-screen bubble reminds you while transport controls are visible |
 | Play/Pause | Pause or resume |

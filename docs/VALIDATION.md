@@ -60,3 +60,17 @@ now render to images on delegate-free CALayers. A 48-press alternating seek
 burst passed on the physical device without restarting the player process.
 The ARMv7 build and host fixture suite passed. Audio/transcode settings were
 not changed. The preview.1 download predates this fix.
+
+## Post-seek synchronization candidate
+
+The owner reproduced lip-sync loss after seeking with the old native trick-play
+path. Directional taps now accumulate in 10-second increments and debounce for
+400 ms. Only one sample-accurate AVPlayer seek is in flight; subsequent taps
+update its pending target. BackRow's playing/paused state is updated together
+with its AVPlayer, so the next Select toggle remains consistent.
+
+The owner confirmed lip sync in one tested series with this candidate. Two on-device
+samples exercise forward/backward seeks and pause/resume. Target/time and
+player-state logs are technical checks, not measurements of physical HDMI
+audio/video alignment. Broader source/output validation remains open, and
+the preview.1 downloadable binary does not include this candidate.

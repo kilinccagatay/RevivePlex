@@ -37,12 +37,92 @@
 
 static char playbackKey;
 static char systemSessionKey, systemEndedKey, systemSkipKey, systemStartedKey, systemFailureKey, systemTransportTouchedKey;
+static char systemSeekKey;
+
+@interface RevivePlexSeekState : NSObject
+@property(nonatomic) double target;
+@property(nonatomic) double origin;
+@property(nonatomic) BOOL wantsPlayback;
+@property(nonatomic) BOOL inFlight;
+@property(nonatomic) NSUInteger revision;
+@end
+@implementation RevivePlexSeekState
+@end
 
 static AVPlayer *underlyingSystemPlayer(id player)
 {
     Ivar ivar = class_getInstanceVariable([player class], "_player");
     id value = ivar ? object_getIvar(player, ivar) : nil;
     return [value isKindOfClass:[AVPlayer class]] ? value : nil;
+}
+
+static void setSystemPlaybackRunning(id player, BOOL running)
+{
+    // Keep BackRow's state machine in agreement with its AVPlayer. Updating
+    // AVPlayer.rate alone leaves the next native Select toggle out of phase.
+    SEL state = NSSelectorFromString(@"setState:error:");
+    NSError *error = nil;
+    if ([player respondsToSelector:state] &&
+        ((BOOL (*)(id, SEL, int, NSError **))objc_msgSend)(player, state, running ? 3 : 1, &error)) return;
+    AVPlayer *native = underlyingSystemPlayer(player);
+    if (running) [native play]; else [native pause];
+}
+
+static void finishQueuedSeek(id controller, RevivePlexSeekState *state)
+{
+    if (objc_getAssociatedObject(controller, &systemSeekKey) != state ||
+        !objc_getAssociatedObject(controller, &systemSessionKey) || state.inFlight) return;
+    id player = ((id (*)(id, SEL))objc_msgSend)(controller, NSSelectorFromString(@"player"));
+    AVPlayer *native = underlyingSystemPlayer(player);
+    if (native.currentItem.status != AVPlayerItemStatusReadyToPlay) {
+        objc_setAssociatedObject(controller, &systemSeekKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+    state.inFlight = YES;
+    double requested = state.target;
+    setSystemPlaybackRunning(player, NO);
+    __weak id weakController = controller;
+    [native seekToTime:CMTimeMakeWithSeconds(requested, 600) toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            id active = weakController;
+            if (!active || objc_getAssociatedObject(active, &systemSeekKey) != state ||
+                !objc_getAssociatedObject(active, &systemSessionKey)) return;
+            state.inFlight = NO;
+            if (fabs(state.target - requested) > 0.001) {
+                finishQueuedSeek(active, state); return;
+            }
+            objc_setAssociatedObject(active, &systemSeekKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            double actual = CMTimeGetSeconds(native.currentTime);
+            syslog(LOG_NOTICE, "RevivePlex: queued precise seek requested=%.3f actual=%.3f completed=%d resume=%d", requested, actual, finished, state.wantsPlayback);
+            if (finished) {
+                revivePlexShowSeekFeedback(active, actual - state.origin, actual, CMTimeGetSeconds(native.currentItem.duration));
+                setSystemPlaybackRunning(player, state.wantsPlayback);
+            }
+        });
+    }];
+}
+
+static void queueSystemSeek(id controller, double delta)
+{
+    id player = ((id (*)(id, SEL))objc_msgSend)(controller, NSSelectorFromString(@"player"));
+    AVPlayer *native = underlyingSystemPlayer(player);
+    double position = CMTimeGetSeconds(native.currentTime), duration = CMTimeGetSeconds(native.currentItem.duration);
+    if (native.currentItem.status != AVPlayerItemStatusReadyToPlay || !isfinite(position) ||
+        !isfinite(duration) || duration <= 0) return;
+    RevivePlexSeekState *state = objc_getAssociatedObject(controller, &systemSeekKey);
+    if (!state) {
+        state = [RevivePlexSeekState new];
+        state.origin = position; state.target = position; state.wantsPlayback = native.rate > 0;
+        objc_setAssociatedObject(controller, &systemSeekKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        setSystemPlaybackRunning(player, NO);
+    }
+    state.target = MAX(0, MIN(MAX(0, duration - 0.05), state.target + delta));
+    NSUInteger revision = ++state.revision;
+    revivePlexShowSeekFeedback(controller, state.target - state.origin, state.target, duration);
+    __weak id weakController = controller;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 400 * (int64_t)NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        if (weakController && state.revision == revision) finishQueuedSeek(weakController, state);
+    });
 }
 
 // BackRow's start time may land on the preceding HLS keyframe. Complete a
@@ -118,7 +198,7 @@ static void reportSystemProgress(id controller, NSString *override)
     if (![player respondsToSelector:elapsed] || ![player respondsToSelector:duration] ||
         ![player respondsToSelector:rate]) return;
     double position = ((double (*)(id, SEL))objc_msgSend)(player, elapsed);
-    if (!override) {
+    if (!override && !objc_getAssociatedObject(controller, &systemSeekKey)) {
         double target = revivePlexPlaybackSkipTarget(session, position);
         revivePlexSetSkipHint(controller, target > 0 ? nil : revivePlexPlaybackSkipAction(session, position)[@"title"]);
         SEL seek = NSSelectorFromString(@"setElapsedTime:");
@@ -164,6 +244,7 @@ static void scheduleSystemProgress(id controller)
 
 static void systemPlayerPopped(id self, SEL command)
 {
+    objc_setAssociatedObject(self, &systemSeekKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     revivePlexSetSkipHint(self, nil);
     revivePlexSetOptionsHint(self, NO);
     id session = objc_getAssociatedObject(self, &systemSessionKey);
@@ -225,6 +306,7 @@ static BOOL systemPlayerEvent(id self, SEL command, id event)
         id eventPlayer = ((id (*)(id, SEL))objc_msgSend)(self, NSSelectorFromString(@"player"));
         AVPlayer *eventNative = underlyingSystemPlayer(eventPlayer);
         int eventValue = ((int (*)(id, SEL))objc_msgSend)(event, valueSelector);
+        if (action == 1) objc_setAssociatedObject(self, &systemSeekKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         if (eventValue == 1) objc_setAssociatedObject(self, &systemTransportTouchedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         double eventTime = CMTimeGetSeconds(eventNative.currentTime);
         syslog(LOG_NOTICE, "RevivePlex: transport action=%d value=%d time=%.3f rate=%.2f", action, eventValue, eventTime, (double)eventNative.rate);
@@ -254,20 +336,15 @@ static BOOL systemPlayerEvent(id self, SEL command, id event)
             }
         }
         if (action == 6 || action == 7) {
-            id player = ((id (*)(id, SEL))objc_msgSend)(self, NSSelectorFromString(@"player"));
-            SEL elapsed = NSSelectorFromString(@"elapsedTime"), duration = NSSelectorFromString(@"duration");
-            double before = [player respondsToSelector:elapsed] ? ((double (*)(id, SEL))objc_msgSend)(player, elapsed) : 0;
-            struct objc_super parent = {self, NSClassFromString(@"BRMediaPlayerController")};
-            BOOL handled = ((BOOL (*)(struct objc_super *, SEL, id))objc_msgSendSuper)(&parent, command, event);
-            if (((int (*)(id, SEL))objc_msgSend)(event, valueSelector) == 1) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * (int64_t)NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-                    if (!objc_getAssociatedObject(self, &systemSessionKey)) return;
-                    double position = [player respondsToSelector:elapsed] ? ((double (*)(id, SEL))objc_msgSend)(player, elapsed) : 0;
-                    double length = [player respondsToSelector:duration] ? ((double (*)(id, SEL))objc_msgSend)(player, duration) : 0;
-                    if (fabs(position - before) > 1) revivePlexShowSeekFeedback(self, position - before, position, length);
-                });
-            }
-            return handled;
+            // Do not enter BackRow's trick-play path for HLS. Coalesce repeated
+            // taps into serialized, sample-accurate seeks on the shared A/V player.
+            if (eventValue == 1) queueSystemSeek(self, action == 7 ? 10 : -10);
+            return YES;
+        }
+        RevivePlexSeekState *pending = objc_getAssociatedObject(self, &systemSeekKey);
+        if (action == 5 && pending) {
+            if (eventValue == 1) pending.wantsPlayback = !pending.wantsPlayback;
+            return YES;
         }
     }
     struct objc_super parent = {self, NSClassFromString(@"BRMediaPlayerController")};
