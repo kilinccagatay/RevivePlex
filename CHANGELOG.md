@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1
+
+- Resume playback when leaving playback options with Menu/Back, retaining position, selected version and queue.
+- Defer the options transition until the native held-Select handler finishes.
+- Handle the separate Play/Pause button on movie, episode and series cards; Select still opens details.
+- Choose the most recently viewed unfinished episode when several episodes have saved progress.
+- Preserve Play/Pause intent during a queued precise seek.
+
+
 ## 0.1.0
 
 - Fix rapid-seek crashes by keeping decorative overlays outside BackRow control traversal.

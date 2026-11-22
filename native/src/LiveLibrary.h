@@ -61,3 +61,8 @@ id revivePlexToggleFilterRows(id rows, id entry);
 id revivePlexLocalizedMenuTitle(id route);
 
 signed char revivePlexDiagnosticScreensOnly(void);
+
+signed char revivePlexCanQuickPlay(id route);
+void revivePlexQuickPlayRoute(id route, void (^completion)(id route));
+id revivePlexResumeEpisode(id episodes);
+id revivePlexResumeOptionsRoute(id route);

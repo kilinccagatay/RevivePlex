@@ -155,6 +155,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 body = b'<MediaContainer><Directory title="Drama" key="7"/><Directory title="Comedy" key="8"/></MediaContainer>' 
         elif self.path.split("?", 1)[0] == "/library/sections/1/all":
             body = b'<MediaContainer><Video title="Fixture Movie" type="movie" ratingKey="42"/></MediaContainer>'
+        elif self.path.split("?", 1)[0] == "/library/metadata/71":
+            body = b'<MediaContainer><Video type="movie" ratingKey="71" title="Resume fixture" duration="60000" viewOffset="12000"><Media videoCodec="h264" audioCodec="aac"><Part id="710" key="/library/parts/710/file.mp4"/></Media></Video></MediaContainer>'
         elif self.path.split("?", 1)[0] == "/library/metadata/42":
             body = (b'<MediaContainer><Video title="Fixture Movie" year="2024" type="movie" '
                     b'duration="3600000" viewOffset="42000" viewCount="1" summary="Fixture summary"/></MediaContainer>')

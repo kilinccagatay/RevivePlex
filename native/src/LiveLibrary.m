@@ -1139,7 +1139,7 @@ void revivePlexLoadRows(id selectedRoute, void (^completion)(id))
         completion(panelRows(modes, @{@"summary":RPText(@"Seçimin ardından oynatma kaldığı yerden devam eder.")})); return;
     }
     if ([kind isEqual:@"playbackOptions"]) {
-        NSMutableDictionary *resume = [selectedRoute mutableCopy]; resume[@"kind"] = @"transcode"; resume[@"title"] = RPText(@"Oynatıcı");
+        NSDictionary *resume = revivePlexResumeOptionsRoute(selectedRoute);
         if ([selectedRoute[@"live"] boolValue]) {
             completion(panelRows(@[row(RPText(@"İzlemeye devam et"), resume),
                 row(RPText(@"Video kalitesi"), route(RPText(@"Video kalitesi"), @"quality", @""))], @{@"actionGrid":@YES})); return;
@@ -1448,12 +1448,7 @@ void revivePlexLoadRows(id selectedRoute, void (^completion)(id))
                     [@[@"show", @"season"] containsObject:item[@"type"] ?: @""]) {
                     NSArray *content = rows;
                     void (^withEpisodes)(NSDictionary *, NSError *) = ^(NSDictionary *leaves, NSError *leafError) {
-                        NSDictionary *candidate = nil;
-                        for (NSDictionary *episode in leaves[@"items"]) {
-                            if (![episode[@"type"] isEqual:@"episode"] || !numberKey(episode[@"ratingKey"])) continue;
-                            if (!candidate || ([candidate[@"viewCount"] intValue] > 0 && ![episode[@"viewCount"] intValue])) candidate = episode;
-                            if ([episode[@"viewOffset"] doubleValue] > 0 && [episode[@"viewOffset"] doubleValue] < [episode[@"duration"] doubleValue]) { candidate = episode; break; }
-                        }
+                        NSDictionary *candidate = revivePlexResumeEpisode(leaves[@"items"]);
                         NSArray *resultRows = content;
                         if (!leafError && candidate) {
                             NSString *playPath = [@"/library/metadata/" stringByAppendingString:candidate[@"ratingKey"]];
@@ -2438,4 +2433,47 @@ id revivePlexDiagnosticRoutes(void)
         [safe addObject:route];
     }
     return safe;
+}
+
+// Resolve the same server-backed default action used by a detail/series page.
+// A remote Play press bypasses that page without treating Select as Play.
+signed char revivePlexCanQuickPlay(id selectedRoute)
+{
+    return [@[@"detail", @"series", @"transcode", @"play"] containsObject:selectedRoute[@"kind"] ?: @""];
+}
+
+void revivePlexQuickPlayRoute(id selectedRoute, void (^completion)(id))
+{
+    if (!revivePlexCanQuickPlay(selectedRoute)) { completion(nil); return; }
+    if ([@[@"transcode", @"play"] containsObject:selectedRoute[@"kind"]]) { completion(selectedRoute); return; }
+    revivePlexLoadRows(selectedRoute, ^(NSArray *rows) {
+        for (NSDictionary *entry in rows) {
+            NSDictionary *next = entry[@"route"];
+            if ([@[@"transcode", @"play"] containsObject:next[@"kind"] ?: @""]) { completion(next); return; }
+        }
+        completion(nil);
+    });
+}
+
+id revivePlexResumeEpisode(id episodes)
+{
+    NSDictionary *fallback = nil, *unfinished = nil;
+    for (NSDictionary *episode in episodes) {
+        if (![episode[@"type"] isEqual:@"episode"] || !numberKey(episode[@"ratingKey"])) continue;
+        if (!fallback || ([fallback[@"viewCount"] intValue] > 0 && ![episode[@"viewCount"] intValue])) fallback = episode;
+        double offset = [episode[@"viewOffset"] doubleValue];
+        if (offset > 0 && offset < [episode[@"duration"] doubleValue] &&
+            (!unfinished || [episode[@"lastViewedAt"] doubleValue] > [unfinished[@"lastViewedAt"] doubleValue])) unfinished = episode;
+    }
+    return unfinished ?: fallback;
+}
+
+id revivePlexResumeOptionsRoute(id selectedRoute)
+{
+    if (![selectedRoute[@"kind"] isEqual:@"playbackOptions"]) return nil;
+    NSMutableDictionary *resume = [selectedRoute mutableCopy];
+    resume[@"kind"] = @"transcode";
+    resume[@"title"] = RPText(@"Oynatıcı");
+    [resume removeObjectForKey:@"playbackError"];
+    return resume;
 }

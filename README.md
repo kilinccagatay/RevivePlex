@@ -45,8 +45,8 @@ This is a **first release**, not complete parity with every Plex client. See [va
 
 ```sh
 shasum -a 256 -c SHA256SUMS
-unzip RevivePlex-0.1.0.zip
-cd RevivePlex-0.1.0
+unzip RevivePlex-0.1.1.zip
+cd RevivePlex-0.1.1
 python3 tools/install.py root@APPLE_TV_IP --legacy-ssh --check
 python3 tools/install.py root@APPLE_TV_IP --legacy-ssh --bundle RevivePlex.frappliance
 ```
@@ -79,6 +79,8 @@ Scan the QR code or visit the displayed Plex link and enter the activation code.
 | Hold Select | Open playback options; the on-screen bubble reminds you while transport controls are visible |
 | Play/Pause | Pause or resume |
 | Menu / Back | Return one screen; on Home, first focus Search, then exit when Search is already focused |
+
+On a movie or episode card, **Play/Pause** starts playback at its saved position. On a series card it resumes the most recently viewed unfinished episode (with a two-second lead-in). **Select** opens details. From playback options, **Menu/Back** returns to playback.
 
 App language: **More → Settings → App language**. Video quality is an upper limit; **Preserve compatible video** avoids unnecessary video conversion where the codec, resolution, bitrate and subtitle requirements allow it. Audio may still be converted.
 

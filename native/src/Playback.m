@@ -37,7 +37,7 @@
 
 static char playbackKey;
 static char systemSessionKey, systemEndedKey, systemSkipKey, systemStartedKey, systemFailureKey, systemTransportTouchedKey;
-static char systemSeekKey;
+static char systemSeekKey, systemOptionsPendingKey;
 
 @interface RevivePlexSeekState : NSObject
 @property(nonatomic) double target;
@@ -342,7 +342,7 @@ static BOOL systemPlayerEvent(id self, SEL command, id event)
             return YES;
         }
         RevivePlexSeekState *pending = objc_getAssociatedObject(self, &systemSeekKey);
-        if (action == 5 && pending) {
+        if ((action == 5 || action == 10) && pending) {
             if (eventValue == 1) pending.wantsPlayback = !pending.wantsPlayback;
             return YES;
         }
@@ -357,7 +357,17 @@ static void systemPlayerOptions(id self, SEL command)
     SEL elapsed = NSSelectorFromString(@"elapsedTime");
     double position = [player respondsToSelector:elapsed] ? ((double (*)(id, SEL))objc_msgSend)(player, elapsed) : 0;
     id route = revivePlexPlaybackOptionsRoute(objc_getAssociatedObject(self, &systemSessionKey), position);
-    if (route && revivePlexOpenPlaybackOptions(self, route)) return;
+    if (route) {
+        if (objc_getAssociatedObject(self, &systemOptionsPendingKey)) return;
+        objc_setAssociatedObject(self, &systemOptionsPendingKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        // Finish BackRow's held-Select event before replacing its controller.
+        // Otherwise its remaining state transition can pop the new options page.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            objc_setAssociatedObject(self, &systemOptionsPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (objc_getAssociatedObject(self, &systemSessionKey)) revivePlexOpenPlaybackOptions(self, route);
+        });
+        return;
+    }
     struct objc_super parent = {self, NSClassFromString(@"BRMediaPlayerController")};
     ((void (*)(struct objc_super *, SEL))objc_msgSendSuper)(&parent, command);
 }

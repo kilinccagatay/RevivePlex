@@ -252,6 +252,8 @@ static void playerWasPushed(id self, SEL command)
 
 #ifdef REVIVEPLEX_ARTWORK
 static void itemSelected(id self, SEL command, long row);
+static id makeLiveMenu(id route);
+static char quickPlayPendingKey;
 static char posterRefreshPendingKey;
 static unsigned long posterRefreshSequence;
 
@@ -317,6 +319,14 @@ static signed char eventWithPoster(id self, SEL command, id event)
         SEND(signed char, SEL)(stack, SELECTOR("respondsToSelector:"), SELECTOR("popController")) &&
         SEND(id)(stack, SELECTOR("peekController")) == self) {
         if (SEND(int)(event, SELECTOR("value")) == 1) {
+            id currentRoute = objc_getAssociatedObject(self, &menuRouteKey);
+            if (SEND(signed char, id)(valueForKey(currentRoute, @"kind"), SELECTOR("isEqual:"), @"playbackOptions") &&
+                !valueForKey(currentRoute, @"playbackError")) {
+                // Options replace the player. Back means resume, not pop to details.
+                id next = makeLiveMenu(revivePlexResumeOptionsRoute(currentRoute));
+                if (next) SEND(void, id)(stack, SELECTOR("swapController:"), next);
+                return 1;
+            }
             id homeList = SEND(id)(self, SELECTOR("list"));
             // Home Back first returns focus to Search; only a second press there exits.
             // Consume the release too, so one press cannot perform both actions.
@@ -333,6 +343,24 @@ static signed char eventWithPoster(id self, SEL command, id event)
         return 1;
     }
     id list = SEND(id)(self, SELECTOR("list"));
+    if (!player && SEND(signed char, SEL)(event, SELECTOR("respondsToSelector:"), SELECTOR("remoteAction")) &&
+        SEND(signed char, SEL)(event, SELECTOR("respondsToSelector:"), SELECTOR("value")) &&
+        SEND(int)(event, SELECTOR("remoteAction")) == 10) {
+        id selectedRoute = valueForKey(liveRow(self, SEND(long)(list, SELECTOR("selection"))), @"route");
+        if (revivePlexCanQuickPlay(selectedRoute)) {
+            if (SEND(int)(event, SELECTOR("value")) == 1 && !objc_getAssociatedObject(self, &quickPlayPendingKey)) {
+                objc_setAssociatedObject(self, &quickPlayPendingKey, selectedRoute, 1);
+                revivePlexQuickPlayRoute(selectedRoute, ^(id route) {
+                    if (objc_getAssociatedObject(self, &quickPlayPendingKey) != selectedRoute) return;
+                    objc_setAssociatedObject(self, &quickPlayPendingKey, 0, 1);
+                    if (objc_getAssociatedObject(self, &menuPoppedKey) || SEND(id)(stack, SELECTOR("peekController")) != self) return;
+                    id next = route ? makeLiveMenu(route) : 0;
+                    if (next) SEND(void, id)(stack, SELECTOR("pushController:"), next);
+                });
+            }
+            return 1;
+        }
+    }
     if (valueForKey(liveRow(self, 0), @"qr") &&
         SEND(signed char, SEL)(event, SELECTOR("respondsToSelector:"), SELECTOR("remoteAction")) &&
         SEND(signed char, SEL)(event, SELECTOR("respondsToSelector:"), SELECTOR("value"))) {
@@ -1081,6 +1109,33 @@ static long probeSelection(id menu)
 
 static void runScreenProbes(id home, id stack, id routes, unsigned long index);
 
+// One-shot device regression: remote Play, options, Back, resumed position.
+static void runOptionsReturnProbe(id home, id stack, id screen, int phase, double expected, int attempts)
+{
+    if (!attempts) { stage("options return probe timed out"); return; }
+    id current = SEND(id)(stack, SELECTOR("peekController"));
+    int native = SEND(signed char, Class)(current, SELECTOR("isKindOfClass:"), objc_getClass("RevivePlexSystemPlayerController"));
+    if (phase == 0 && current == screen && revivePlexCanQuickPlay(valueForKey(liveRow(screen, 0), @"route"))) {
+        sendProbeEvent(stack, 10); phase = 1;
+    } else if ((phase == 1 || phase == 3) && native) {
+        id player = SEND(id)(current, SELECTOR("player"));
+        double position = SEND(double)(player, SELECTOR("elapsedTime"));
+        if (SEND(double)(player, SELECTOR("rate")) == 1 && position > 0) {
+            if (phase == 3) {
+                syslog(LOG_NOTICE, "RevivePlex: options return probe PASS native=1 resumed=%d", position >= expected - 2);
+                sendProbeEvent(stack, 1); return;
+            }
+            expected = position;
+            SEND(void)(current, SELECTOR("_enterChaptersSubtitlesAndAlternateAudioPickingState")); phase = 2;
+        }
+    } else if (phase == 2 && SEND(signed char, id)(valueForKey(objc_getAssociatedObject(current, &menuRouteKey), @"kind"), SELECTOR("isEqual:"), @"playbackOptions")) {
+        sendProbeEvent(stack, 1); phase = 3;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        runOptionsReturnProbe(home, stack, screen, phase, expected, attempts - 1);
+    });
+}
+
 static void runSyncSeekProbe(id home, id stack, id routes, unsigned long index, unsigned int attempts)
 {
     if (!attempts) { stage("sync seek probe readiness timed out"); return; }
@@ -1143,6 +1198,9 @@ static void runScreenProbes(id home, id stack, id routes, unsigned long index)
     id screen = makeLiveMenu(route);
     if (!screen) return;
     SEND(void, id)(stack, SELECTOR("pushController:"), screen);
+    if (SEND(signed char)(valueForKey(route, @"optionsReturnProbe"), SELECTOR("boolValue"))) {
+        runOptionsReturnProbe(home, stack, screen, 0, 0, 120); return;
+    }
     if (SEND(signed char)(valueForKey(route, @"sortStackProbe"), SELECTOR("boolValue"))) {
         for (int iteration = 0; iteration < 2; iteration++) {
             int choice = iteration ? 2 : 3;

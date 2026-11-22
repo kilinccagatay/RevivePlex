@@ -83,3 +83,16 @@ held its paused position for the scheduled three seconds; callbacks in the
 first sample were delayed, so it only verifies the toggle, not a timed hold.
 No crash exception occurred in this run. These measurements concern the player
 time/state and must not be interpreted as 1 ms measured A/V output alignment.
+
+## 0.1.1 regression checks
+
+Host fixtures cover movie resume, series episode resolution, the two-second episode
+lead-in, most-recently-viewed selection independent of episode order, and options
+return preserving position, media version and queue even before menu rows load.
+The ARMv7 build, signature and plist checks pass.
+
+An on-device one-shot regression sent Play/Pause on a detail action, opened the
+native playback-options entry point, sent Menu/Back, and verified return to the
+native player at the saved position with playback running. This checks controller
+flow and timeline position; it does not establish new physical lip-sync measurements.
+The existing precise seek and server audio settings remain in use.

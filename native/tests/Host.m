@@ -221,6 +221,34 @@ int main(int argc, char **argv)
         id (*editSearch)(id, id) = dlsym(bundle, "revivePlexEditSearch");
         void (*loadRows)(id, void (^)(id)) = dlsym(bundle, "revivePlexLoadRows");
         verify(searchKeyboard && searchRoute && searchTarget && editSearch && loadRows, "search test entry points missing");
+        id (*resumeEpisode)(id) = dlsym(bundle, "revivePlexResumeEpisode");
+        void (*quickPlay)(id, void (^)(id)) = dlsym(bundle, "revivePlexQuickPlayRoute");
+        signed char (*canQuickPlay)(id) = dlsym(bundle, "revivePlexCanQuickPlay");
+        verify(resumeEpisode && quickPlay && canQuickPlay, "Quick Play entry points missing");
+        id (*resumeOptions)(id) = dlsym(bundle, "revivePlexResumeOptionsRoute");
+        NSDictionary *returnOptionsRoute = @{@"kind":@"playbackOptions", @"path":@"/library/metadata/71", @"resume":@123.5, @"mediaIndex":@1, @"queueSnapshot":@{@"id":@"55"}};
+        NSDictionary *backRoute = resumeOptions(returnOptionsRoute);
+        verify([backRoute[@"kind"] isEqual:@"transcode"] && [backRoute[@"resume"] doubleValue] == 123.5 && [backRoute[@"path"] isEqual:returnOptionsRoute[@"path"]] && [backRoute[@"queueSnapshot"] isEqual:returnOptionsRoute[@"queueSnapshot"]] && [backRoute[@"mediaIndex"] intValue] == 1, "Options Back must resume with position, version and queue intact even before rows load");
+        NSDictionary *older = @{@"type":@"episode", @"ratingKey":@"1", @"viewOffset":@10000, @"duration":@60000, @"lastViewedAt":@100};
+        NSDictionary *recent = @{@"type":@"episode", @"ratingKey":@"2", @"viewOffset":@20000, @"duration":@60000, @"lastViewedAt":@200};
+        verify([resumeEpisode(@[older, recent]) isEqual:recent] && [resumeEpisode(@[recent, older]) isEqual:recent], "Series Play must resume most recently viewed unfinished episode");
+        verify(!canQuickPlay(@{@"kind":@"settings"}), "Play must not activate unrelated menu items");
+        __block BOOL quickVerified = NO;
+        quickPlay(@{@"kind":@"series", @"path":@"/library/metadata/61"}, ^(NSDictionary *route) {
+            verify([route[@"kind"] isEqual:@"transcode"] && [route[@"path"] isEqual:@"/library/metadata/63"] && [route[@"resume"] doubleValue] == 40, "Series Play lost episode or two-second resume allowance");
+            quickVerified = YES;
+        });
+        NSDate *quickDeadline = [NSDate dateWithTimeIntervalSinceNow:5];
+        while (!quickVerified && [quickDeadline timeIntervalSinceNow] > 0) [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+        verify(quickVerified, "Quick Play resolution timed out");
+        __block BOOL movieQuickVerified = NO;
+        quickPlay(@{@"kind":@"detail", @"path":@"/library/metadata/71"}, ^(NSDictionary *route) {
+            verify([route[@"kind"] isEqual:@"transcode"] && [route[@"path"] isEqual:@"/library/metadata/71"] && [route[@"resume"] doubleValue] == 12, "Movie Play lost saved position");
+            movieQuickVerified = YES;
+        });
+        NSDate *movieQuickDeadline = [NSDate dateWithTimeIntervalSinceNow:5];
+        while (!movieQuickVerified && [movieQuickDeadline timeIntervalSinceNow] > 0) [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+        verify(movieQuickVerified, "Movie Quick Play timed out");
         long (*shelfTarget)(id, long, int, long) = dlsym(bundle, "revivePlexShelfTarget");
         __block BOOL catalogVerified = NO;
         loadRows(@{@"kind":@"media", @"path":@"/library/sections/1/all", @"title":@"Movies"}, ^(NSArray *rows) {
