@@ -74,3 +74,11 @@ samples exercise forward/backward seeks and pause/resume. Target/time and
 player-state logs are technical checks, not measurements of physical HDMI
 audio/video alignment. Broader source/output validation remains open, and
 the preview.1 downloadable binary does not include this candidate.
+
+Both sample runs completed: four queued seeks reached their requested targets
+within 1 ms in the completion logs, and subsequent timeline checks returned
+normal speed. Both Select pause/resume transitions worked. The second sample
+held its paused position for the scheduled three seconds; callbacks in the
+first sample were delayed, so it only verifies the toggle, not a timed hold.
+No crash exception occurred in this run. These measurements concern the player
+time/state and must not be interpreted as 1 ms measured A/V output alignment.
