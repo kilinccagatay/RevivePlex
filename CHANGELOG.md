@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3
+
+- Add Settings > About with installed version/build, platform, license and project/support address in all four interface languages.
+
+- Serialize resume, remote seeking and intro/credits skips through one AVPlayer seek queue.
+- Remove the independent BackRow startup seek so it cannot overlap the precise resume.
+- Retry interrupted seeks with a bounded retry count and retain play/pause intent.
+
 ## 0.1.2
 
 - Show a persistent right-hand scroll indicator when content spans multiple screens, including seasons, libraries, cast, search results, settings and home rails.

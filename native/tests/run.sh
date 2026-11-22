@@ -2,7 +2,12 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
-trap 'rm "$work/bundle" "$work/RevivePlex.o" "$work/host" "$work/incompatible-host" "$work/plex-test" 2>/dev/null || :; rmdir "$work"' EXIT
+trap 'rm "$work/Info.plist" "$work/bundle" "$work/RevivePlex.o" "$work/host" "$work/incompatible-host" "$work/plex-test" 2>/dev/null || :; rmdir "$work"' EXIT
+
+cat > "$work/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>99.8.7</string><key>CFBundleVersion</key><string>12345</string></dict></plist>
+PLIST
 
 xcrun --sdk macosx clang -DREVIVEPLEX_LIVE -fblocks -fno-objc-arc -Wno-cast-function-type-mismatch \
     -c "$here/../src/RevivePlex.m" -o "$work/RevivePlex.o"

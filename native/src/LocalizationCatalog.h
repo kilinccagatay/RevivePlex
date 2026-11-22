@@ -3,6 +3,16 @@ static NSDictionary *additionalTranslations(void)
 {
     static NSDictionary *catalog;
     if (!catalog) catalog = @{
+        @"About":@[@"Om", @"Acerca de"],
+        @"Version":@[@"Version", @"Versión"],
+        @"Build":@[@"Byggnummer", @"Compilación"],
+        @"Community-built Plex media player":@[@"Plex-mediespelare utvecklad av gemenskapen", @"Reproductor Plex creado por la comunidad"],
+        @"Platform":@[@"Plattform", @"Plataforma"],
+        @"License":@[@"Licens", @"Licencia"],
+        @"Source code and support":@[@"Källkod och support", @"Código fuente y soporte"],
+        @"Requires a jailbroken Apple TV.":@[@"Kräver en jailbreakad Apple TV.", @"Requiere un Apple TV con jailbreak."],
+        @"Independent project; not affiliated with Plex or Apple.":@[@"Oberoende projekt utan koppling till Plex eller Apple.", @"Proyecto independiente, no afiliado a Plex ni a Apple."],
+
         @"Hold “Select” for options":@[@"Håll “Select” för alternativ", @"Mantén “Select” para ver opciones"],
         @"Preserve compatible video":@[@"Behåll kompatibel video", @"Conservar vídeo compatible"],
         @"Quality is an upper limit. Compatible video below it keeps its original resolution; audio or video is converted when needed.":@[@"Kvaliteten är en övre gräns. Kompatibel video under gränsen behåller sin ursprungliga upplösning; ljud eller video konverteras vid behov.", @"La calidad es un límite máximo. El vídeo compatible por debajo conserva su resolución original; el audio o vídeo se convierte cuando es necesario."],

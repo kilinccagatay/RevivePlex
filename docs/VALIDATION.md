@@ -111,3 +111,37 @@ The existing precise seek and server audio settings remain in use.
   checksum. Device captures confirmed the indicator at the first, middle and last
   season page, and populated cast cards after the parent-show fallback.
   Private device captures remain outside the repository and release archive.
+
+
+## 0.1.3 shared seek queue
+
+All application-controlled position changes now use the same serialized AVPlayer
+seek queue: saved-position resume, directional taps, automatic marker skipping
+and manual marker skipping. The separate BackRow startup seek was removed.
+Interrupted seeks retry at most twice while retaining the latest play/pause intent.
+
+- ARMv7 build/signature/plist and host regression suite passed.
+- On-device resume and fresh-start runs each exercised forward/backward bursts
+  and pause/resume. Five precise seek completions landed within 2 ms of their
+  targets; both runs held pause and resumed normal timeline progression.
+- The owner confirmed lip sync during resumed and fresh playback, forward seeks,
+  backward seeks and pause/resume. These observations apply to the tested source
+  and output setup, not every possible source or HDMI configuration.
+- The playback implementation is unchanged from the device-tested candidate;
+  the final build additionally includes the About screen.
+- `python3 native/tests/check_seek_log.py /path/to/private-device.log` checks
+  seek completion, paused position and resumed timeline for two syncSeekProbe
+  runs. It does not measure physical HDMI audio/video alignment. Do not commit
+  raw device logs or personal-library diagnostic routes.
+
+Reference: [Apple's seek completion semantics](https://developer.apple.com/documentation/avfoundation/avplayeritem/seek(to:completionhandler:)-91gnw?language=objc).
+
+### About screen
+
+Settings > About reads version/build from the installed appliance's Info.plist,
+not AppleTV.app's host version. Host tests use a different fixture version to
+verify this and check the Settings entry in English, Turkish, Swedish and Spanish.
+The page is local and does not request Plex server data.
+
+The final About page was visually checked on Apple TV in all four languages;
+version 0.1.3 and build 6 were displayed without clipping.

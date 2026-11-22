@@ -45,6 +45,8 @@ static char systemSeekKey, systemOptionsPendingKey;
 @property(nonatomic) BOOL wantsPlayback;
 @property(nonatomic) BOOL inFlight;
 @property(nonatomic) NSUInteger revision;
+@property(nonatomic) NSUInteger interruptions;
+@property(nonatomic) BOOL showsFeedback;
 @end
 @implementation RevivePlexSeekState
 @end
@@ -91,18 +93,22 @@ static void finishQueuedSeek(id controller, RevivePlexSeekState *state)
             if (fabs(state.target - requested) > 0.001) {
                 finishQueuedSeek(active, state); return;
             }
+            if (!finished && state.interruptions++ < 2) {
+                // Native startup/state changes can interrupt an AVFoundation seek.
+                // Retry within the same queue instead of losing the playback intent.
+                finishQueuedSeek(active, state); return;
+            }
             objc_setAssociatedObject(active, &systemSeekKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             double actual = CMTimeGetSeconds(native.currentTime);
             syslog(LOG_NOTICE, "RevivePlex: queued precise seek requested=%.3f actual=%.3f completed=%d resume=%d", requested, actual, finished, state.wantsPlayback);
-            if (finished) {
+            if (finished && state.showsFeedback)
                 revivePlexShowSeekFeedback(active, actual - state.origin, actual, CMTimeGetSeconds(native.currentItem.duration));
-                setSystemPlaybackRunning(player, state.wantsPlayback);
-            }
+            setSystemPlaybackRunning(player, state.wantsPlayback);
         });
     }];
 }
 
-static void queueSystemSeek(id controller, double delta)
+static void queueSystemPosition(id controller, double value, BOOL relative, BOOL feedback)
 {
     id player = ((id (*)(id, SEL))objc_msgSend)(controller, NSSelectorFromString(@"player"));
     AVPlayer *native = underlyingSystemPlayer(player);
@@ -116,17 +122,19 @@ static void queueSystemSeek(id controller, double delta)
         objc_setAssociatedObject(controller, &systemSeekKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         setSystemPlaybackRunning(player, NO);
     }
-    state.target = MAX(0, MIN(MAX(0, duration - 0.05), state.target + delta));
+    state.target = MAX(0, MIN(MAX(0, duration - 0.05), relative ? state.target + value : value));
+    state.showsFeedback = feedback;
+    state.interruptions = 0;
     NSUInteger revision = ++state.revision;
-    revivePlexShowSeekFeedback(controller, state.target - state.origin, state.target, duration);
+    if (feedback) revivePlexShowSeekFeedback(controller, state.target - state.origin, state.target, duration);
     __weak id weakController = controller;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 400 * (int64_t)NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (relative ? 400 : 0) * (int64_t)NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         if (weakController && state.revision == revision) finishQueuedSeek(weakController, state);
     });
 }
 
-// BackRow's start time may land on the preceding HLS keyframe. Complete a
-// precise, shared audio/video seek once ready; never override a user's input.
+// Start a precise resume through the shared queue once playback is ready.
+// A user transport action takes priority over a delayed resume.
 static void alignResumePosition(id controller, double target, NSUInteger attempts)
 {
     if (!attempts || !objc_getAssociatedObject(controller, &systemSessionKey) ||
@@ -142,16 +150,7 @@ static void alignResumePosition(id controller, double target, NSUInteger attempt
     }
     double before = CMTimeGetSeconds(native.currentTime);
     if (isfinite(before) && fabs(before - target) < 0.15) return;
-    [native pause];
-    __weak id weakController = controller;
-    [native seekToTime:CMTimeMakeWithSeconds(target, 600) toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            id active = weakController;
-            if (!active || !objc_getAssociatedObject(active, &systemSessionKey)) return;
-            syslog(LOG_NOTICE, "RevivePlex: precise resume requested=%.3f actual=%.3f completed=%d", target, CMTimeGetSeconds(native.currentTime), finished);
-            if (!objc_getAssociatedObject(active, &systemTransportTouchedKey) && native.currentItem.status == AVPlayerItemStatusReadyToPlay) [native play];
-        });
-    }];
+    queueSystemPosition(controller, target, NO, NO);
 }
 
 void revivePlexFailPlaybackForProbe(id controller)
@@ -201,11 +200,10 @@ static void reportSystemProgress(id controller, NSString *override)
     if (!override && !objc_getAssociatedObject(controller, &systemSeekKey)) {
         double target = revivePlexPlaybackSkipTarget(session, position);
         revivePlexSetSkipHint(controller, target > 0 ? nil : revivePlexPlaybackSkipAction(session, position)[@"title"]);
-        SEL seek = NSSelectorFromString(@"setElapsedTime:");
-        if (target > 0 && [player respondsToSelector:seek] &&
+        if (target > 0 &&
             [objc_getAssociatedObject(controller, &systemSkipKey) doubleValue] != target) {
             objc_setAssociatedObject(controller, &systemSkipKey, @(target), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            ((void (*)(id, SEL, double))objc_msgSend)(player, seek, target);
+            queueSystemPosition(controller, target, NO, YES);
         }
     }
     revivePlexReportProgress(session, position,
@@ -322,13 +320,13 @@ static BOOL systemPlayerEvent(id self, SEL command, id event)
 
         if (action == 3) {
             id player = ((id (*)(id, SEL))objc_msgSend)(self, NSSelectorFromString(@"player"));
-            SEL elapsed = NSSelectorFromString(@"elapsedTime"), seek = NSSelectorFromString(@"setElapsedTime:");
-            if ([player respondsToSelector:elapsed] && [player respondsToSelector:seek]) {
+            SEL elapsed = NSSelectorFromString(@"elapsedTime");
+            if ([player respondsToSelector:elapsed]) {
                 double position = ((double (*)(id, SEL))objc_msgSend)(player, elapsed);
                 double target = [revivePlexPlaybackSkipAction(objc_getAssociatedObject(self, &systemSessionKey), position)[@"target"] doubleValue];
                 if (target > 0) {
-                    if (((int (*)(id, SEL))objc_msgSend)(event, valueSelector) == 1) {
-                        ((void (*)(id, SEL, double))objc_msgSend)(player, seek, target);
+                    if (eventValue == 1) {
+                        queueSystemPosition(self, target, NO, YES);
                         revivePlexSetSkipHint(self, nil);
                     }
                     return YES;
@@ -338,7 +336,7 @@ static BOOL systemPlayerEvent(id self, SEL command, id event)
         if (action == 6 || action == 7) {
             // Do not enter BackRow's trick-play path for HLS. Coalesce repeated
             // taps into serialized, sample-accurate seeks on the shared A/V player.
-            if (eventValue == 1) queueSystemSeek(self, action == 7 ? 10 : -10);
+            if (eventValue == 1) queueSystemPosition(self, action == 7 ? 10 : -10, YES, YES);
             return YES;
         }
         RevivePlexSeekState *pending = objc_getAssociatedObject(self, &systemSeekKey);
@@ -462,9 +460,8 @@ BOOL revivePlexStartSystemHLS(id controller, id url, double resumeAt, id session
     }
     id native = ((id (*)(id, SEL, id))objc_msgSend)([playerControllerClass alloc], initPlayer, player);
     if (!native) return NO;
-    SEL start = NSSelectorFromString(@"setStartTime:");
-    if ([native respondsToSelector:start] && resumeAt > 0 && isfinite(resumeAt))
-        ((void (*)(id, SEL, double))objc_msgSend)(native, start, resumeAt);
+    // Resume uses the same serialized AVPlayer seek as transport and markers.
+    // Do not also schedule BackRow's independent startup seek.
     SEL stop = NSSelectorFromString(@"setAlwaysStopPlaybackWhenPopped:");
     if ([native respondsToSelector:stop]) ((void (*)(id, SEL, BOOL))objc_msgSend)(native, stop, YES);
     objc_setAssociatedObject(native, &systemSessionKey, session, OBJC_ASSOCIATION_RETAIN_NONATOMIC);

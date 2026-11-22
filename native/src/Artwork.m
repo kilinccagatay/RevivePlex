@@ -548,6 +548,38 @@ static void populatePanel(RevivePlexShelf *shelf, NSArray *rows, NSString *title
     NSDictionary *details = rows[0][@"panel"];
     CGFloat margin = width * 0.067;
     BOOL detailActions = [details[@"detailActions"] boolValue];
+    if ([details[@"about"] boolValue]) {
+        UIColor *amber = [UIColor colorWithRed:1 green:0.73 blue:0.24 alpha:1];
+        UIColor *muted = [UIColor colorWithWhite:0.72 alpha:1];
+        CGFloat contentWidth = width - 2 * margin;
+        [shelf.view addSubview:renderedLabel(visualFrame(height, margin, height * 0.07, contentWidth, height * 0.06),
+            RPText(@"Hakkında"), height * 0.032, YES, NO, muted)];
+        [shelf.view addSubview:renderedLabel(visualFrame(height, margin, height * 0.15, contentWidth, height * 0.09),
+            @"RevivePlex", height * 0.060, YES, NO, amber)];
+        [shelf.view addSubview:renderedLabel(visualFrame(height, margin, height * 0.25, contentWidth, height * 0.06),
+            RPText(@"Topluluk tarafından geliştirilen Plex medya oynatıcısı"), height * 0.028, NO, NO, nil)];
+        NSArray *labels = @[RPText(@"Sürüm"), RPText(@"Derleme")];
+        NSArray *values = @[details[@"version"], details[@"build"]];
+        CGFloat gap = width * 0.02, boxWidth = (contentWidth - gap) / 2;
+        for (NSUInteger index = 0; index < 2; index++) {
+            UIView *box = [[UIView alloc] initWithFrame:visualFrame(height, margin + index * (boxWidth + gap), height * 0.35, boxWidth, height * 0.14)];
+            box.backgroundColor = [UIColor colorWithWhite:0.13 alpha:1];
+            box.layer.cornerRadius = 12;
+            [box addSubview:renderedLabel(visualFrame(height * 0.14, height * 0.025, height * 0.015, boxWidth - height * 0.05, height * 0.04), labels[index], height * 0.024, NO, NO, muted)];
+            [box addSubview:renderedLabel(visualFrame(height * 0.14, height * 0.025, height * 0.06, boxWidth - height * 0.05, height * 0.06), values[index], height * 0.038, YES, NO, nil)];
+            [shelf.view addSubview:box];
+        }
+        NSArray *infoLabels = @[RPText(@"Platform"), RPText(@"Lisans"), RPText(@"Kaynak kod ve destek")];
+        NSArray *infoValues = @[@"Apple TV 3 · Rev A (A1469)", @"MIT · RevivePlex contributors", @"github.com/kilinccagatay/RevivePlex"];
+        for (NSUInteger index = 0; index < infoLabels.count; index++) {
+            CGFloat top = height * (0.54 + index * 0.085);
+            [shelf.view addSubview:renderedLabel(visualFrame(height, margin, top, contentWidth * 0.28, height * 0.055), infoLabels[index], height * 0.026, NO, NO, muted)];
+            [shelf.view addSubview:renderedLabel(visualFrame(height, margin + contentWidth * 0.30, top, contentWidth * 0.70, height * 0.055), infoValues[index], height * 0.026, NO, NO, nil)];
+        }
+        NSString *footer = [NSString stringWithFormat:@"%@\n%@", RPText(@"Jailbreak yapılmış Apple TV gerektirir."), RPText(@"Bağımsız bir projedir; Plex veya Apple ile bağlantılı değildir.")];
+        [shelf.view addSubview:renderedText(visualFrame(height, margin, height * 0.83, contentWidth, height * 0.10), footer, height * 0.023, NO, NO, muted, YES)];
+        return;
+    }
     if ([details[@"photo"] length]) {
         UIImageView *photo = [[UIImageView alloc] initWithFrame:CGRectMake(width * 0.035, height * 0.07, width * 0.93, height * 0.86)];
         photo.contentMode = UIViewContentModeScaleAspectFit;

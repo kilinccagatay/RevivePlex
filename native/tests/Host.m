@@ -713,6 +713,18 @@ int main(int argc, char **argv)
         NSArray *spanishKeyboard = searchKeyboard(@"Ñ", 0, nil);
         verify([spanishKeyboard[0][@"searchKeyCount"] intValue] <= 38 && [[spanishKeyboard valueForKey:@"title"] containsObject:@"Ñ"] && [[spanishKeyboard valueForKey:@"title"] containsObject:@"Á"], "Spanish keyboard missing accents or exceeds two rows");
         verify([localize(@"Fixture Movie") isEqual:@"Fixture Movie"], "media title changed during localization");
+        for (NSArray *language in @[@[@"en", @"About"], @[@"tr", @"Hakkında"], @[@"sv", @"Om"], @[@"es", @"Acerca de"]]) {
+            verify(setLanguage(language[0]), "Could not select About test language");
+            loadRows(@{@"kind":@"settings", @"path":@""}, ^(NSArray *settingsRows) {
+                NSDictionary *about = nil;
+                for (NSDictionary *entry in settingsRows) if ([entry[@"route"][@"kind"] isEqual:@"about"]) about = entry;
+                verify(about && [about[@"title"] isEqual:language[1]], "Localized About entry missing from Settings");
+                loadRows(about[@"route"], ^(NSArray *aboutRows) {
+                    NSDictionary *panel = aboutRows[0][@"panel"];
+                    verify([panel[@"about"] boolValue] && [panel[@"version"] isEqual:@"99.8.7"] && [panel[@"build"] isEqual:@"12345"], "About must read the installed appliance plist, not the host or hardcoded version");
+                });
+            });
+        }
         if (previousLanguage) [defaults setObject:previousLanguage forKey:@"RevivePlexLanguage"];
         else [defaults removeObjectForKey:@"RevivePlexLanguage"];
         if (previousKeyboard) [defaults setObject:previousKeyboard forKey:@"RevivePlexKeyboardLanguage"];

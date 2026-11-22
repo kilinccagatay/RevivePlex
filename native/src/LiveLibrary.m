@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dlfcn.h>
 
 #import "DemoGallery.h"
 
@@ -147,7 +148,7 @@ id revivePlexAdjacentPhoto(id source, int direction)
 
 id revivePlexLocalizedMenuTitle(id source)
 {
-    NSDictionary *titles = @{@"settings":@"Ayarlar", @"language":@"Uygulama dili", @"quality":@"Video kalitesi",
+    NSDictionary *titles = @{@"settings":@"Ayarlar", @"about":@"Hakkında", @"language":@"Uygulama dili", @"quality":@"Video kalitesi",
         @"autoplay":@"Sonraki içeriği otomatik oynat", @"skipMarkers":@"Giriş ve jenerik atlama", @"sort":@"Sırala",
         @"filters":@"Filtrele", @"servers":@"Sunucu seç", @"homeUsers":@"Plex Home kullanıcıları",
         @"status":@"Sunucu durumu", @"logout":@"Oturumu kapat", @"playbackOptions":@"Oynatma ayarları"};
@@ -879,6 +880,19 @@ static NSArray *castRows(NSDictionary *item)
 
 void revivePlexLoadRows(id selectedRoute, void (^completion)(id))
 {
+    if ([selectedRoute[@"kind"] isEqual:@"about"]) {
+        Dl_info location;
+        NSDictionary *info = nil;
+        if (dladdr(&defaultOrigin, &location) && location.dli_fname) {
+            NSString *binary = [NSString stringWithUTF8String:location.dli_fname];
+            info = [NSDictionary dictionaryWithContentsOfFile:[binary.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"Info.plist"]];
+        }
+        NSString *version = [info[@"CFBundleShortVersionString"] isKindOfClass:[NSString class]] ? info[@"CFBundleShortVersionString"] : RPText(@"Kullanılamıyor");
+        NSString *build = [info[@"CFBundleVersion"] isKindOfClass:[NSString class]] ? info[@"CFBundleVersion"] : RPText(@"Kullanılamıyor");
+        completion(panelRows(@[row(RPText(@"Hakkında"), nil)], @{@"about":@YES, @"version":version, @"build":build}));
+        return;
+    }
+
 #ifdef REVIVEPLEX_DEMO_SCREENSHOTS
     if ([selectedRoute[@"kind"] isEqual:@"demo"]) { completion(revivePlexDemoRows(selectedRoute[@"path"])); return; }
 #endif
@@ -1357,6 +1371,7 @@ void revivePlexLoadRows(id selectedRoute, void (^completion)(id))
         [rows addObject:row(RPText(@"Giriş ve jenerik atlama"), route(RPText(@"Giriş ve jenerik atlama"), @"skipMarkers", @""))];
         [rows addObject:row(RPText(@"Video kalitesi"), route(RPText(@"Video kalitesi"), @"quality", @""))];
         [rows addObject:row(RPText(@"Uygulama dili"), route(RPText(@"Uygulama dili"), @"language", @""))];
+        [rows addObject:row(RPText(@"Hakkında"), route(RPText(@"Hakkında"), @"about", @""))];
         if (token.length)
             [rows addObject:row(RPText(@"Oturumu kapat"), route(RPText(@"Oturumu kapat"), @"logout", @""))];
         else
@@ -2450,7 +2465,7 @@ id revivePlexDiagnosticRoutes(void)
     NSMutableArray *safe = [NSMutableArray array];
     for (id route in routes) {
         if (![route isKindOfClass:[NSDictionary class]] || safe.count >= 12) continue;
-        BOOL cloud = [@[@"demo", @"settings", @"language", @"quality", @"skipMarkers", @"watchlist", @"cloudItem", @"discoverResults", @"more", @"homeUsers", @"playlistName", @"playlistManage", @"playlistEdit", @"liveTV", @"recordingSchedule", @"recordingRules", @"recordingInfo", @"playbackOptions", @"queueItems", @"queueEdit", @"queueItemActions", @"queueModes"] containsObject:route[@"kind"] ?: @""];
+        BOOL cloud = [@[@"demo", @"settings", @"about", @"language", @"quality", @"skipMarkers", @"watchlist", @"cloudItem", @"discoverResults", @"more", @"homeUsers", @"playlistName", @"playlistManage", @"playlistEdit", @"liveTV", @"recordingSchedule", @"recordingRules", @"recordingInfo", @"playbackOptions", @"queueItems", @"queueEdit", @"queueItemActions", @"queueModes"] containsObject:route[@"kind"] ?: @""];
         if ((!cloud && ![@[@"media", @"detail", @"cast", @"photo", @"series", @"extras", @"chapters", @"description", @"sort", @"filters", @"filterValues", @"subtitleSearch", @"versions", @"transcode"] containsObject:route[@"kind"] ?: @""]) ||
             ![route[@"path"] isKindOfClass:[NSString class]] || (!cloud && ![route[@"path"] hasPrefix:@"/library/"] && ![route[@"path"] isEqual:@"/hubs/home/continueWatching"]) ||
             ![route[@"title"] isKindOfClass:[NSString class]]) continue;

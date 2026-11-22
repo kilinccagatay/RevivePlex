@@ -63,6 +63,15 @@ id revivePlexText(id source)
     if (!english) {
         english = @{
             @"Ara":@"Search",
+            @"Hakkında":@"About",
+            @"Sürüm":@"Version",
+            @"Derleme":@"Build",
+            @"Topluluk tarafından geliştirilen Plex medya oynatıcısı":@"Community-built Plex media player",
+            @"Platform":@"Platform",
+            @"Lisans":@"License",
+            @"Kaynak kod ve destek":@"Source code and support",
+            @"Jailbreak yapılmış Apple TV gerektirir.":@"Requires a jailbroken Apple TV.",
+            @"Bağımsız bir projedir; Plex veya Apple ile bağlantılı değildir.":@"Independent project; not affiliated with Plex or Apple.",
             @"Video akışı oynatılamadı. Yeniden deneyebilir veya video kalitesini düşürebilirsin.":@"The video stream could not play. Try again or choose a lower video quality.",
             @"Sunucu videoyu zamanında hazırlayamadı. Daha düşük kaliteyle yeniden deneyebilirsin.":@"The server took too long to prepare the video. Try again with a lower quality.",
             @"Program rehberi":@"Program guide",

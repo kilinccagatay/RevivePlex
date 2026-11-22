@@ -37,6 +37,8 @@ These are captures of the real application renderer using an isolated demonstrat
 
 This is a **first release**, not complete parity with every Plex client. See [validation and limitations](docs/VALIDATION.md). Account/server features depend on Plex permissions and capabilities. Heavy 4K sources may require a faster server or an optimized version; this device does not gain 4K/HDR hardware support through transcoding.
 
+You can check the installed version and build under **Settings → About**.
+
 ## Install a release
 
 1. Verify the device is already jailbroken, SSH works and `beigelist` is installed. Keep a working SSH connection available during installation.
@@ -45,8 +47,8 @@ This is a **first release**, not complete parity with every Plex client. See [va
 
 ```sh
 shasum -a 256 -c SHA256SUMS
-unzip RevivePlex-0.1.2.zip
-cd RevivePlex-0.1.2
+unzip RevivePlex-0.1.3.zip
+cd RevivePlex-0.1.3
 python3 tools/install.py root@APPLE_TV_IP --legacy-ssh --check
 python3 tools/install.py root@APPLE_TV_IP --legacy-ssh --bundle RevivePlex.frappliance
 ```
