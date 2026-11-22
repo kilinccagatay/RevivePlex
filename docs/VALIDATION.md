@@ -51,3 +51,12 @@ The documented Python installer was exercised on the target device: prerequisite
 check, bundle upload, binary SHA256 readback, existing-bundle backup, install and
 interface restart passed. The Plex session remained valid. The clean exported
 source tree also passed its own host tests and ARMv7 build.
+
+## Rapid seeking crash fix (source after preview.1)
+
+A device crash during rapid seeking was traced to `-[UIView active]`: BackRow
+traversed a UIView-backed decorative overlay as a native control. Player hints
+now render to images on delegate-free CALayers. A 48-press alternating seek
+burst passed on the physical device without restarting the player process.
+The ARMv7 build and host fixture suite passed. Audio/transcode settings were
+not changed. The preview.1 download predates this fix.

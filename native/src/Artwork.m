@@ -236,6 +236,23 @@ static UIImageView *buttonText(CGRect frame, NSString *text, CGFloat size)
     return renderedText(frame, text, size, YES, NO, nil, first < (CFIndex)styled.length);
 }
 
+// A UIView-backed layer still exposes its UIView delegate to BackRow's
+// control traversal, even when attached with addSublayer:. Rasterize temporary
+// views and attach only a delegate-free layer to the native player.
+static CALayer *playerOverlay(UIView *drawing)
+{
+    UIGraphicsBeginImageContextWithOptions(drawing.bounds.size, NO, 1);
+    [drawing.layer renderInContext:UIGraphicsGetCurrentContext()];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    if (!image) return nil;
+    CALayer *layer = [NSClassFromString(@"CALayer") layer];
+    layer.frame = drawing.frame;
+    layer.contents = (__bridge id)image.CGImage;
+    layer.zPosition = drawing.layer.zPosition;
+    return layer;
+}
+
 static char skipHintKey, skipHintTitleKey;
 void revivePlexSetSkipHint(id controller, id title)
 {
@@ -244,8 +261,8 @@ void revivePlexSetSkipHint(id controller, id title)
     id previousTitle = objc_getAssociatedObject(controller, &skipHintTitleKey);
     if ((!previousTitle && !title) || [previousTitle isEqual:title]) return;
     objc_setAssociatedObject(controller, &skipHintTitleKey, title, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    UIView *previous = objc_getAssociatedObject(controller, &skipHintKey);
-    [previous.layer removeFromSuperlayer];
+    CALayer *previous = objc_getAssociatedObject(controller, &skipHintKey);
+    [previous removeFromSuperlayer];
     objc_setAssociatedObject(controller, &skipHintKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (![title length] || host.bounds.size.width < 400) return;
     CGFloat width = host.bounds.size.width, height = host.bounds.size.height;
@@ -253,10 +270,9 @@ void revivePlexSetSkipHint(id controller, id title)
     hint.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.94];
     hint.layer.cornerRadius = 8; hint.layer.zPosition = 1100;
     [hint addSubview:renderedLabel(hint.bounds, title, height * 0.025, YES, YES, nil)];
-    // BackRow enumerates controller subviews as BRControls and sends `active`.
-    // Keep this decorative UIKit view outside that control hierarchy.
-    [host.layer addSublayer:hint.layer];
-    objc_setAssociatedObject(controller, &skipHintKey, hint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    CALayer *overlay = playerOverlay(hint);
+    if (overlay) [host.layer addSublayer:overlay];
+    objc_setAssociatedObject(controller, &skipHintKey, overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static char optionsHintKey;
@@ -264,9 +280,9 @@ void revivePlexSetOptionsHint(id controller, signed char visible)
 {
     if (![controller isKindOfClass:[UIView class]]) return;
     UIView *host = controller;
-    UIView *existing = objc_getAssociatedObject(controller, &optionsHintKey);
+    CALayer *existing = objc_getAssociatedObject(controller, &optionsHintKey);
     if (!visible) {
-        [existing.layer removeFromSuperlayer];
+        [existing removeFromSuperlayer];
         objc_setAssociatedObject(controller, &optionsHintKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
@@ -277,8 +293,9 @@ void revivePlexSetOptionsHint(id controller, signed char visible)
     bubble.layer.cornerRadius = 12; bubble.layer.zPosition = 1100;
     [bubble addSubview:renderedLabel(CGRectMake(h * 0.015, h * 0.01, w * 0.345 - h * 0.03, h * 0.07),
         RPText(@"Seçenekler için “Select”i basılı tut"), h * 0.024, YES, YES, nil)];
-    [host.layer addSublayer:bubble.layer];
-    objc_setAssociatedObject(controller, &optionsHintKey, bubble, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    CALayer *overlay = playerOverlay(bubble);
+    if (overlay) [host.layer addSublayer:overlay];
+    objc_setAssociatedObject(controller, &optionsHintKey, overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static char seekFeedbackKey;
@@ -292,19 +309,21 @@ static NSString *playbackClock(double value)
 void revivePlexShowSeekFeedback(id controller, double delta, double position, double duration)
 {
     if (![controller isKindOfClass:[UIView class]] || !isfinite(position) || !isfinite(duration) || duration <= 0) return;
-    UIView *host = controller, *previous = objc_getAssociatedObject(controller, &seekFeedbackKey);
-    [previous.layer removeFromSuperlayer];
+    UIView *host = controller;
+    CALayer *previous = objc_getAssociatedObject(controller, &seekFeedbackKey);
+    [previous removeFromSuperlayer];
     CGFloat width = host.bounds.size.width, height = host.bounds.size.height;
     UIView *hud = [[UIView alloc] initWithFrame:visualFrame(height, width * 0.30, height * 0.70, width * 0.40, height * 0.09)];
     hud.backgroundColor = [UIColor colorWithWhite:0.06 alpha:0.94];
     hud.layer.cornerRadius = 10; hud.layer.zPosition = 1101;
     NSString *label = [NSString stringWithFormat:@"%@%@   ·   %@ / %@", delta < 0 ? @"−" : @"+", playbackClock(fabs(delta)), playbackClock(position), playbackClock(duration)];
     [hud addSubview:renderedLabel(hud.bounds, label, height * 0.028, YES, YES, nil)];
-    [host.layer addSublayer:hud.layer];
-    objc_setAssociatedObject(controller, &seekFeedbackKey, hud, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    CALayer *overlay = playerOverlay(hud);
+    if (overlay) [host.layer addSublayer:overlay];
+    objc_setAssociatedObject(controller, &seekFeedbackKey, overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * (int64_t)NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        if (objc_getAssociatedObject(controller, &seekFeedbackKey) != hud) return;
-        [hud.layer removeFromSuperlayer];
+        if (objc_getAssociatedObject(controller, &seekFeedbackKey) != overlay) return;
+        [overlay removeFromSuperlayer];
         objc_setAssociatedObject(controller, &seekFeedbackKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     });
 }

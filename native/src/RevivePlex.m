@@ -1144,6 +1144,23 @@ static void runScreenProbes(id home, id stack, id routes, unsigned long index)
         }); return;
     }
     int formatProbe = SEND(signed char)(valueForKey(route, @"formatProbe"), SELECTOR("boolValue"));
+    if (SEND(signed char)(valueForKey(route, @"seekBurstProbe"), SELECTOR("boolValue"))) {
+        for (int step = 0; step < 48; step++) {
+            int action = (step / 8) % 2 ? 6 : 7;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (10 * NSEC_PER_SEC) + step * 150 * (int64_t)NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+                id current = SEND(id)(stack, SELECTOR("peekController"));
+                if (SEND(signed char, Class)(current, SELECTOR("isKindOfClass:"), objc_getClass("RevivePlexSystemPlayerController"))) sendProbeEvent(stack, action);
+            });
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 19 * (int64_t)NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            id current = SEND(id)(stack, SELECTOR("peekController"));
+            if (SEND(signed char, Class)(current, SELECTOR("isKindOfClass:"), objc_getClass("RevivePlexSystemPlayerController"))) {
+                stage("seek burst survived 48 directional presses");
+                revivePlexCaptureScreenForProbe(current, @"RevivePlex.seek-burst.png");
+                sendProbeEvent(stack, 5);
+            }
+        });
+    }
     if (SEND(signed char)(valueForKey(route, @"transportProbe"), SELECTOR("boolValue"))) {
         for (int check = 0; check < 2; check++) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (22 + check * 13) * (int64_t)NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             id current = SEND(id)(stack, SELECTOR("peekController"));
